@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma"
 import { requireTeam } from "@/lib/team"
 import { SettingsClient } from "./settings-client"
 
+export const dynamic = "force-dynamic"
+
 export default async function SettingsPage() {
   const membership = await requireTeam()
   const team = await prisma.team.findUnique({

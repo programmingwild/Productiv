@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma"
 import { requireTeam } from "@/lib/team"
 import { SprintsClient } from "./sprints-client"
 
+export const dynamic = "force-dynamic"
+
 export default async function SprintsPage() {
   const membership = await requireTeam()
 

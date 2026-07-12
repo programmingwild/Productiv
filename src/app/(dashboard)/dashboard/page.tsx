@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth"
 import { requireTeam } from "@/lib/team"
 import { DashboardContent } from "./dashboard-content"
 
+export const dynamic = "force-dynamic"
+
 export default async function DashboardPage() {
   const session = await auth()
   if (!session?.user?.id) redirect("/login")

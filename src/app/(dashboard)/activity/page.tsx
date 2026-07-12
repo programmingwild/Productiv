@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma"
 import { requireTeam } from "@/lib/team"
 import { ActivityClient } from "./activity-client"
 
+export const dynamic = "force-dynamic"
+
 export default async function ActivityPage() {
   const membership = await requireTeam()
 
