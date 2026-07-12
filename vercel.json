@@ -1,13 +1,9 @@
 {
   "version": 2,
   "framework": "nextjs",
-  "buildCommand": "npx prisma generate && npx next build",
-  "installCommand": "npm install",
-  "outputDirectory": ".next",
   "git": {
     "deploymentEnabled": {
-      "main": true,
-      "develop": true
+      "main": true
     }
   },
   "env": {
