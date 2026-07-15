@@ -1,4 +1,5 @@
 {
+  "name": "productiv",
   "version": 2,
   "framework": "nextjs",
   "git": {
