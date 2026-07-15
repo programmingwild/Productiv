@@ -6,9 +6,14 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
+const databaseUrl = process.env.POSTGRES_PRISMA_URL
+
 function createPrismaClient() {
+  if (!databaseUrl) {
+    throw new Error("Missing POSTGRES_PRISMA_URL environment variable")
+  }
   const poolConfig: PoolConfig = {
-    connectionString: process.env.DATABASE_URL!,
+    connectionString: databaseUrl,
     ssl: { rejectUnauthorized: false },
     max: 1,
     idleTimeoutMillis: 0,

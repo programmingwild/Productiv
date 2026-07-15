@@ -8,7 +8,7 @@ on:
 
 env:
   NODE_VERSION: "20"
-  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
 
 jobs:
   quality:

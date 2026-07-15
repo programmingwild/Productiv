@@ -8,7 +8,6 @@
     }
   },
   "env": {
-    "NEXT_TELEMETRY_DISABLED": "1",
-    "NODE_TLS_REJECT_UNAUTHORIZED": "0"
+    "NEXT_TELEMETRY_DISABLED": "1"
   }
 }

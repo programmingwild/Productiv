@@ -7,7 +7,7 @@ import bcrypt from "bcryptjs"
 import crypto from "crypto"
 
 const poolConfig: PoolConfig = {
-  connectionString: process.env.DATABASE_URL!,
+  connectionString: process.env.POSTGRES_PRISMA_URL!,
   ssl: { rejectUnauthorized: false },
 }
 const adapter = new PrismaPg(poolConfig)
