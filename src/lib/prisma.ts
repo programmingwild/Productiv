@@ -1,10 +1,23 @@
+import type { PoolConfig } from "pg"
+import { PrismaPg } from "@prisma/adapter-pg"
 import { PrismaClient } from "../generated/prisma-client"
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-export const prisma =
-  globalForPrisma.prisma ?? new PrismaClient({})
+function createPrismaClient() {
+  const poolConfig: PoolConfig = {
+    connectionString: process.env.DATABASE_URL!,
+    ssl: { rejectUnauthorized: false },
+    max: 1,
+    idleTimeoutMillis: 0,
+    connectionTimeoutMillis: 5000,
+  }
+  const adapter = new PrismaPg(poolConfig)
+  return new PrismaClient({ adapter })
+}
+
+export const prisma = globalForPrisma.prisma ?? createPrismaClient()
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
