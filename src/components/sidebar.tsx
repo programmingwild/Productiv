@@ -4,7 +4,6 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { signOut } from "next-auth/react"
 import { useState, useEffect, useRef } from "react"
-import { supabase } from "@/lib/supabase"
 import type { Team, Project } from "../generated/prisma-client"
 import { NotificationBell } from "./notifications/notification-bell"
 import { ThemeToggle } from "./theme-toggle"
@@ -115,12 +114,7 @@ export function Sidebar({ team, user }: SidebarProps) {
   }, [pathname])
 
   useEffect(() => {
-    const client = supabase
-    if (!client) return
-
-    const chanName = `sidebar-activity-${team.id}-${Math.random().toString(36).slice(2, 8)}`
     let active = true
-
     async function fetchUnread() {
       try {
         const res = await fetch("/api/activities/count")
@@ -130,33 +124,9 @@ export function Sidebar({ team, user }: SidebarProps) {
         }
       } catch {}
     }
-
     fetchUnread()
-
-    try {
-      const channel = client
-        .channel(chanName)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "activities", filter: `teamId=eq.${team.id}` },
-          () => { if (active) setActivityCount((c) => c + 1) },
-        )
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "activities", filter: `teamId=eq.${team.id}` },
-          (payload) => {
-            if (!active) return
-            const old = payload.old as Record<string, unknown>
-            const neu = payload.new as Record<string, unknown>
-            if (old.read === false && neu.read === true) {
-              setActivityCount((c) => Math.max(0, c - 1))
-            }
-          },
-        )
-        .subscribe()
-
-      return () => { active = false; try { client.removeChannel(channel) } catch {} }
-    } catch { return () => {} }
+    const interval = setInterval(fetchUnread, 15000)
+    return () => { active = false; clearInterval(interval) }
   }, [team.id])
 
   const [projects, setProjects] = useState<ProjectData[]>(team.projects)
@@ -164,34 +134,15 @@ export function Sidebar({ team, user }: SidebarProps) {
   useEffect(() => { setProjects(team.projects) }, [team.projects])
 
   useEffect(() => {
-    const client = supabase
-    if (!client) return
-    const chanName = `sidebar-projects-${team.id}-${Math.random().toString(36).slice(2, 8)}`
-    let active = true
-
-    const channel = client
-      .channel(chanName)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "projects", filter: `teamId=eq.${team.id}` }, (payload) => {
-        if (!active) return
-        const raw = payload.new as Record<string, unknown>
-        setProjects((prev) => {
-          if (prev.find((p) => p.id === raw.id)) return prev
-          return [...prev, { id: raw.id as string, name: raw.name as string, color: raw.color as string ?? "#6366f1" }]
-        })
-      })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "projects", filter: `teamId=eq.${team.id}` }, (payload) => {
-        if (!active) return
-        const raw = payload.new as Record<string, unknown>
-        setProjects((prev) => prev.map((p) => p.id === raw.id ? { ...p, name: raw.name as string, color: raw.color as string ?? "#6366f1" } : p))
-      })
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "projects", filter: `teamId=eq.${team.id}` }, (payload) => {
-        if (!active) return
-        const raw = payload.old as Record<string, unknown>
-        setProjects((prev) => prev.filter((p) => p.id !== raw.id))
-      })
-      .subscribe()
-
-    return () => { active = false; try { client.removeChannel(channel) } catch {} }
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/projects")
+        if (!res.ok) return
+        const data = await res.json()
+        setProjects(data.map((p: { id: string; name: string; color: string }) => ({ id: p.id, name: p.name, color: p.color ?? "#6366f1" })))
+      } catch {}
+    }, 15000)
+    return () => clearInterval(interval)
   }, [team.id])
 
   const navItems = [

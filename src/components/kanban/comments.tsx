@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { supabase } from "@/lib/supabase"
 import { useLanguage } from "@/contexts/language"
 
 interface Comment {
@@ -27,43 +26,21 @@ export function TaskComments({ taskId }: Props) {
   useEffect(() => { stableTaskId.current = taskId }, [taskId])
 
   useEffect(() => {
-    setError("")
-    fetch(`/api/tasks/${taskId}/comments`)
-      .then((r) => r.json())
-      .then((data) => { setComments(data); setLoading(false) })
-      .catch(() => { setError(t("Failed to load comments")); setLoading(false) })
-
-    const client = supabase
-    if (!client) return
-
-    const chanName = `comments-${taskId}-${Math.random().toString(36).slice(2, 8)}`
-    let active = true
-
-    try {
-      const channel = client
-        .channel(chanName)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "comments", filter: `taskId=eq.${taskId}` },
-          (payload) => {
-            if (!active) return
-            const newComment = payload.new as Record<string, unknown>
-            setComments((prev) => {
-              if (prev.find((c) => c.id === newComment.id)) return prev
-              const userRaw = newComment.user as Comment["user"] | undefined
-              return [...prev, { id: newComment.id as string, content: newComment.content as string, createdAt: newComment.created_at as string ?? newComment.createdAt as string, user: userRaw ?? { id: "", name: t("Unknown"), image: null } }]
-            })
-          },
-        )
-        .subscribe()
-
-      return () => {
-        active = false
-        try { client.removeChannel(channel) } catch {}
+    async function fetchComments() {
+      try {
+        setError("")
+        const res = await fetch(`/api/tasks/${taskId}/comments`)
+        const data = await res.json()
+        setComments(data)
+      } catch {
+        setError(t("Failed to load comments"))
+      } finally {
+        setLoading(false)
       }
-    } catch {
-      return () => { active = false }
     }
+    fetchComments()
+    const interval = setInterval(fetchComments, 15000)
+    return () => clearInterval(interval)
   }, [taskId])
 
   async function handleSubmit(e: React.FormEvent) {

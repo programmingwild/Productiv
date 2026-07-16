@@ -1,9 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
-import { useRealtimeSubscription } from "@/hooks/use-realtime"
 import { useLanguage } from "@/contexts/language"
-import { supabase } from "@/lib/supabase"
 
 interface SprintTask {
   id: string
@@ -89,75 +87,16 @@ export function SprintsClient({
   const [aiSuggestions, setAiSuggestions] = useState("")
   const [aiLoading, setAiLoading] = useState(false)
 
-  useRealtimeSubscription<SprintData>(
-    "sprints",
-    teamId,
-    (payload) => {
-      setSprints((prev) => {
-        if (prev.find((s) => s.id === payload.id)) return prev
-        return [...prev, { ...payload, tasks: payload.tasks ?? [] }]
-      })
-    },
-    (payload) => {
-      setSprints((prev) => prev.map((s) => s.id === payload.id ? { ...s, ...payload } : s))
-    },
-    (payload) => {
-      setSprints((prev) => {
-        const filtered = prev.filter((s) => s.id !== payload.id)
-        if (activeIdx >= filtered.length) setActiveIdx(Math.max(0, filtered.length - 1))
-        return filtered
-      })
-    },
-  )
-
   useEffect(() => {
-    const client = supabase
-    if (!client) return
-    const chanName = `sprint-tasks-${teamId}-${Math.random().toString(36).slice(2, 8)}`
-    let active = true
-    try {
-      const channel = client
-        .channel(chanName)
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "tasks", filter: `teamId=eq.${teamId}` },
-          (payload) => {
-            if (!active) return
-            const raw = payload.new as Record<string, unknown>
-            const taskId = raw.id as string
-            const newSprintId = raw.sprintId as string | null
-            const taskData = { id: taskId, title: raw.title as string, priority: raw.priority as string ?? "none", position: raw.position as number ?? 0, createdAt: raw.created_at as string ?? raw.createdAt as string, assignee: raw.assignee as SprintTask["assignee"] ?? null }
-            setSprints((prev) => {
-              let changed = false
-              const next = prev.map((s) => {
-                if (s.id === newSprintId) {
-                  if (!s.tasks.find((t) => t.id === taskId)) {
-                    changed = true
-                    return { ...s, tasks: [...s.tasks, taskData] }
-                  }
-                } else if (s.tasks.find((t) => t.id === taskId)) {
-                  changed = true
-                  return { ...s, tasks: s.tasks.filter((t) => t.id !== taskId) }
-                }
-                return s
-              })
-              if (changed) setUnassignedTasks((prev) => {
-                if (newSprintId && prev.find((t) => t.id === taskId)) return prev.filter((t) => t.id !== taskId)
-                if (!newSprintId && !prev.find((t) => t.id === taskId)) return [...prev, taskData]
-                return prev
-              })
-              return changed ? next as SprintData[] : prev
-            })
-          },
-        )
-        .subscribe()
-      return () => {
-        active = false
-        try { client.removeChannel(channel) } catch {}
-      }
-    } catch {
-      return () => { active = false }
-    }
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/sprints?teamId=${teamId}`)
+        if (!res.ok) return
+        const data = await res.json()
+        setSprints(data)
+      } catch {}
+    }, 15000)
+    return () => clearInterval(interval)
   }, [teamId])
 
   const getAiSprintInsights = useCallback(async () => {

@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useLanguage } from "@/contexts/language"
-import { useRealtimeSubscription } from "@/hooks/use-realtime"
-import { supabase } from "@/lib/supabase"
+
 
 interface ActivityItem {
   id: string
@@ -123,60 +122,28 @@ export function ActivityClient({ initialActivities, teamId }: { initialActivitie
 
   const groupOrder = ["Today", "Yesterday", "This Week", "This Month", "Older"]
 
-  useRealtimeSubscription<Record<string, unknown>>(
-    "activities",
-    teamId,
-    (payload) => {
-      const enriched: ActivityItem = {
-        id: payload.id as string,
-        userId: payload.userId as string,
-        teamId: payload.teamId as string,
-        action: payload.action as string,
-        metadata: payload.metadata as Record<string, unknown> | null,
-        read: payload.read as boolean,
-        createdAt: payload.created_at as string ?? payload.createdAt as string,
-        user: null,
-        task: null,
-      }
-      setNewIds((prev) => new Set(prev).add(enriched.id))
-      setTimeout(() => setNewIds((prev) => { const next = new Set(prev); next.delete(enriched.id); return next }), 2000)
-      setActivities((prev) => [enriched, ...prev])
-    },
-    (payload) => {
-      setActivities((prev) => prev.map((a) => a.id === payload.id ? { ...a, ...payload } : a))
-    },
-    (payload) => {
-      setActivities((prev) => prev.filter((a) => a.id !== payload.id))
-    },
-  )
-
   useEffect(() => {
-    const client = supabase
-    if (!client) return
-    const chanName = `activity-users-${teamId}-${Math.random().toString(36).slice(2, 8)}`
-    let active = true
-    try {
-      const channel = client
-        .channel(chanName)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "activities", filter: `teamId=eq.${teamId}` },
-          async (payload) => {
-            if (!active) return
-            const raw = payload.new as Record<string, unknown>
-            const uid = raw.userId as string
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/activities")
+        if (!res.ok) return
+        const data = await res.json()
+        setActivities(data)
+        const unenriched = data.filter((a: ActivityItem) => a.user === null)
+        await Promise.all(
+          unenriched.map(async (a: ActivityItem) => {
             try {
-              const res = await fetch(`/api/users/${uid}/minimal`)
-              if (res.ok) {
-                const user = await res.json()
-                setActivities((prev) => prev.map((a) => a.userId === uid && !a.user ? { ...a, user } : a))
+              const r = await fetch(`/api/users/${a.userId}/minimal`)
+              if (r.ok) {
+                const user = await r.json()
+                setActivities((prev) => prev.map((x) => x.id === a.id ? { ...x, user } : x))
               }
             } catch {}
-          },
+          }),
         )
-        .subscribe()
-      return () => { active = false; try { client.removeChannel(channel) } catch {} }
-    } catch { return () => {} }
+      } catch {}
+    }, 15000)
+    return () => clearInterval(interval)
   }, [teamId])
 
   return (
@@ -185,7 +152,7 @@ export function ActivityClient({ initialActivities, teamId }: { initialActivitie
         <h1 className="text-2xl font-black tracking-tight" style={{ color: "var(--nb-text)" }}>📡 {t("Activity Feed")}</h1>
         <p className="text-sm font-bold mt-1" style={{ color: "var(--nb-text-soft)" }}>
           {t("Everything happening across your workspace — in real time")}
-          <span className="ml-2 text-xs" style={{ color: "#4ecdc4" }}>{t("● Live")}</span>
+          <span className="ml-2 text-xs" style={{ color: "#4ecdc4" }}>{t("● Auto-refresh")}</span>
         </p>
       </div>
 

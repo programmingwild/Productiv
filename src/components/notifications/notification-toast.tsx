@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { supabase } from "@/lib/supabase"
 import { useLanguage } from "@/contexts/language"
 
 interface ToastItem {
@@ -16,6 +15,7 @@ export function NotificationToast({ userId, teamId }: { userId: string; teamId: 
   const { t } = useLanguage()
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const seenIds = useRef<Set<string>>(new Set())
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id))
@@ -24,21 +24,15 @@ export function NotificationToast({ userId, teamId }: { userId: string; teamId: 
   }, [])
 
   useEffect(() => {
-    const client = supabase
-    if (!client) return
-
-    const chanName = `toast-notifications-${userId}-${Math.random().toString(36).slice(2, 8)}`
-    let active = true
-
-    try {
-      const channel = client
-        .channel(chanName)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "notifications", filter: `userId=eq.${userId}` },
-          (payload) => {
-            if (!active) return
-            const raw = payload.new as Record<string, unknown>
+    async function checkNotifications() {
+      try {
+        const res = await fetch("/api/notifications")
+        if (!res.ok) return
+        const { notifications } = await res.json()
+        if (notifications.length > 0) {
+          const newItems = notifications.filter((n: Record<string, unknown>) => !seenIds.current.has(n.id as string))
+          for (const raw of newItems) {
+            seenIds.current.add(raw.id as string)
             const item: ToastItem = {
               id: raw.id as string,
               title: raw.title as string,
@@ -49,30 +43,25 @@ export function NotificationToast({ userId, teamId }: { userId: string; teamId: 
             setToasts((prev) => [item, ...prev].slice(0, 3))
             const timer = setTimeout(() => removeToast(item.id), 5000)
             timersRef.current.set(item.id, timer)
-          },
-        )
-        .subscribe()
-
-      return () => { active = false; try { client.removeChannel(channel) } catch {} }
-    } catch { return () => {} }
-  }, [userId, removeToast])
+          }
+        }
+      } catch {}
+    }
+    checkNotifications()
+    const interval = setInterval(checkNotifications, 15000)
+    return () => clearInterval(interval)
+  }, [removeToast])
 
   useEffect(() => {
-    const client = supabase
-    if (!client) return
-
-    const chanName = `toast-activities-${teamId}-${Math.random().toString(36).slice(2, 8)}`
-    let active = true
-
-    try {
-      const channel = client
-        .channel(chanName)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "activities", filter: `teamId=eq.${teamId}` },
-          (payload) => {
-            if (!active) return
-            const raw = payload.new as Record<string, unknown>
+    async function checkActivities() {
+      try {
+        const res = await fetch("/api/activities")
+        if (!res.ok) return
+        const activities = await res.json()
+        if (activities.length > 0) {
+          const newItems = activities.filter((a: Record<string, unknown>) => !seenIds.current.has(a.id as string))
+          for (const raw of newItems) {
+            seenIds.current.add(raw.id as string)
             const item: ToastItem = {
               id: raw.id as string,
               title: t("New activity"),
@@ -83,13 +72,14 @@ export function NotificationToast({ userId, teamId }: { userId: string; teamId: 
             setToasts((prev) => [item, ...prev].slice(0, 3))
             const timer = setTimeout(() => removeToast(item.id), 5000)
             timersRef.current.set(item.id, timer)
-          },
-        )
-        .subscribe()
-
-      return () => { active = false; try { client.removeChannel(channel) } catch {} }
-    } catch { return () => {} }
-  }, [teamId, removeToast])
+          }
+        }
+      } catch {}
+    }
+    checkActivities()
+    const interval = setInterval(checkActivities, 15000)
+    return () => clearInterval(interval)
+  }, [removeToast])
 
   if (toasts.length === 0) return null
 

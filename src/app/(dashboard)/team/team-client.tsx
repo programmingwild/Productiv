@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { useLanguage } from "@/contexts/language"
-import { supabase } from "@/lib/supabase"
 
 interface MemberData {
   id: string
@@ -37,54 +36,18 @@ export function TeamClient({
   }, [initialMembers])
 
   useEffect(() => {
-    const client = supabase
-    if (!client) return
-    const chanName = `team-members-${teamId}-${Math.random().toString(36).slice(2, 8)}`
-    let active = true
-    try {
-      const channel = client
-        .channel(chanName)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "team_members", filter: `teamId=eq.${teamId}` },
-          (payload) => {
-            if (!active) return
-            const raw = payload.new as Record<string, unknown>
-            fetch(`/api/users/${raw.userId as string}/minimal`).then((r) => r.json()).then((user) => {
-              if (!active) return
-              setMembers((prev) => {
-                if (prev.find((m) => m.id === raw.id)) return prev
-                return [...prev, { id: raw.id as string, userId: raw.userId as string, role: (raw.role as string).toLowerCase(), name: user.name ?? t("Unknown"), email: user.email ?? "", image: user.image ?? null }]
-              })
-            }).catch(() => {})
-          },
-        )
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "team_members", filter: `teamId=eq.${teamId}` },
-          (payload) => {
-            if (!active) return
-            const raw = payload.new as Record<string, unknown>
-            setMembers((prev) => prev.map((m) => m.id === raw.id ? { ...m, role: (raw.role as string).toLowerCase() } : m))
-          },
-        )
-        .on(
-          "postgres_changes",
-          { event: "DELETE", schema: "public", table: "team_members", filter: `teamId=eq.${teamId}` },
-          (payload) => {
-            if (!active) return
-            const raw = payload.old as Record<string, unknown>
-            setMembers((prev) => prev.filter((m) => m.id !== raw.id))
-          },
-        )
-        .subscribe()
-      return () => {
-        active = false
-        try { client.removeChannel(channel) } catch {}
-      }
-    } catch {
-      return () => { active = false }
+    async function fetchMembers() {
+      try {
+        const res = await fetch(`/api/team/members?teamId=${teamId}`)
+        if (res.ok) {
+          const data = await res.json()
+          setMembers(data)
+        }
+      } catch {}
     }
+    fetchMembers()
+    const interval = setInterval(fetchMembers, 15000)
+    return () => clearInterval(interval)
   }, [teamId])
 
   const isOwner = members.find((m) => m.userId === currentUserId)?.role === "owner"

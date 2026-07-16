@@ -5,7 +5,6 @@ import { useParams } from "next/navigation"
 import { useLanguage } from "@/contexts/language"
 import { KanbanBoard } from "@/components/kanban/board"
 import { ExportButton } from "@/components/export-button"
-import { supabase } from "@/lib/supabase"
 import type { BoardData, Member } from "@/types/kanban"
 
 export default function BoardPage() {
@@ -26,13 +25,10 @@ export default function BoardPage() {
         setProject({ id: data.id, name: data.name, boards: data.boards })
 
         if (data.boards.length > 0) {
-          const client = supabase
-          if (client) {
-            const { data: teamData } = await client
-              .from("team_members")
-              .select("id, userId, role, user:users!user_id(id, name, email, image)")
-              .eq("teamId", data.teamId)
-            if (teamData) {
+          try {
+            const memberRes = await fetch(`/api/team/members?teamId=${data.teamId}`)
+            if (memberRes.ok) {
+              const teamData = await memberRes.json()
               const mapped: Member[] = teamData.map((m: Record<string, unknown>) => ({
                 id: (m.user as Record<string, unknown>)?.id as string || m.userId as string,
                 name: (m.user as Record<string, unknown>)?.name as string || "",
@@ -41,7 +37,7 @@ export default function BoardPage() {
               }))
               setMembers(mapped)
             }
-          }
+          } catch {}
         }
       } catch {
         setError(t("Could not load board"))

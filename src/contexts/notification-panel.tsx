@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react"
-import { useRealtimeUserSubscription } from "@/hooks/use-realtime"
+
 
 export interface NotificationData {
   id: string
@@ -111,26 +111,6 @@ export function NotificationPanelProvider({ children, userId }: { children: Reac
     const interval = setInterval(fetchNotifications, 10000)
     return () => clearInterval(interval)
   }, [fetchNotifications])
-
-  useRealtimeUserSubscription<NotificationData>(
-    "notifications",
-    userId,
-    (payload) => {
-      setNotifications((prev) => {
-        if (prev.find((n) => n.id === payload.id)) return prev
-        playNotificationSound()
-        tryBrowserNotification(payload.title, payload.message)
-        if (typeof navigator !== "undefined") navigator.vibrate?.(200)
-        return [payload, ...prev]
-      })
-    },
-    (payload) => {
-      setNotifications((prev) => prev.map((n) => n.id === payload.id ? { ...n, ...payload } : n))
-    },
-    (payload) => {
-      setNotifications((prev) => prev.filter((n) => n.id !== payload.id))
-    },
-  )
 
   const toggleRead = useCallback(async (id: string) => {
     let newRead: boolean | null = null

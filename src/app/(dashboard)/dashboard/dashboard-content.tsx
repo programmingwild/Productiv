@@ -5,7 +5,6 @@ import { useLanguage } from "@/contexts/language"
 import { NotificationBell } from "@/components/notifications/notification-bell"
 import { DashboardAnalytics } from "@/components/dashboard-analytics"
 import { useActivities } from "@/hooks/use-activities"
-import { supabase } from "@/lib/supabase"
 import Link from "next/link"
 
 const colors = ["#f7d44a", "#4ecdc4", "#e85d75", "#a8e6cf", "#ff8c42", "#6c5ce7", "#fd79a8", "#00cec9", "#e17055", "#0984e3"]
@@ -40,51 +39,15 @@ export function DashboardContent({ data }: { data: DashboardData }) {
   }, [data])
 
   useEffect(() => {
-    const client = supabase
-    if (!client) return
-    const chanName = `dashboard-projects-${data.team.id}-${Math.random().toString(36).slice(2, 8)}`
-    let active = true
-    try {
-      const channel = client
-        .channel(chanName)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "projects", filter: `teamId=eq.${data.team.id}` },
-          (payload) => {
-            if (!active) return
-            const raw = payload.new as Record<string, unknown>
-            setProjects((prev) => {
-              if (prev.find((p) => p.id === raw.id)) return prev
-              return [...prev, { id: raw.id as string, name: raw.name as string, color: raw.color as string ?? "#6366f1", description: raw.description as string | null }]
-            })
-          },
-        )
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "projects", filter: `teamId=eq.${data.team.id}` },
-          (payload) => {
-            if (!active) return
-            const raw = payload.new as Record<string, unknown>
-            setProjects((prev) => prev.map((p) => p.id === raw.id ? { ...p, name: raw.name as string, color: raw.color as string ?? "#6366f1", description: raw.description as string | null } : p))
-          },
-        )
-        .on(
-          "postgres_changes",
-          { event: "DELETE", schema: "public", table: "projects", filter: `teamId=eq.${data.team.id}` },
-          (payload) => {
-            if (!active) return
-            const raw = payload.old as Record<string, unknown>
-            setProjects((prev) => prev.filter((p) => p.id !== raw.id))
-          },
-        )
-        .subscribe()
-      return () => {
-        active = false
-        try { client.removeChannel(channel) } catch {}
-      }
-    } catch {
-      return () => { active = false }
-    }
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/projects")
+        if (!res.ok) return
+        const data = await res.json()
+        setProjects(data.map((p: { id: string; name: string; color: string; description: string | null }) => ({ id: p.id, name: p.name, color: p.color ?? "#6366f1", description: p.description })))
+      } catch {}
+    }, 15000)
+    return () => clearInterval(interval)
   }, [data.team.id])
 
   const visibleActivities = activities.filter((a) => !dismissed.has(a.id))

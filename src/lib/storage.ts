@@ -1,68 +1,21 @@
-import { supabase, supabaseAdmin } from "./supabase"
+import { put, del } from "@vercel/blob"
 
-const BUCKET = "task-attachments"
-
-async function ensureBucketByName(bucketName: string) {
-  const client = supabaseAdmin ?? supabase
-  if (!client) return false
+export async function uploadFile(file: File, _teamId: string, _taskId: string): Promise<{ url: string; name: string; size: number; mimeType: string } | null> {
   try {
-    const { data } = await client.storage.getBucket(bucketName)
-    if (!data) {
-      await client.storage.createBucket(bucketName, { public: true })
-    }
-    return true
-  } catch {
-    try {
-      await client.storage.createBucket(bucketName, { public: true })
-      return true
-    } catch (e) { console.error(`Bucket "${bucketName}" creation failed:`, e) }
-  }
-  return false
-}
-
-export async function ensureBucket() {
-  return ensureBucketByName(BUCKET)
-}
-
-export async function ensureAvatarBucket() {
-  return ensureBucketByName("avatars")
-}
-
-export async function uploadFile(file: File, teamId: string, taskId: string): Promise<{ url: string; name: string; size: number; mimeType: string } | null> {
-  const client = supabase
-  if (!client) return null
-
-  const ext = file.name.split(".").pop() ?? "bin"
-  const path = `${teamId}/${taskId}/${crypto.randomUUID()}.${ext}`
-
-  const { data, error } = await client.storage
-    .from(BUCKET)
-    .upload(path, file, {
-      cacheControl: "3600",
-      upsert: false,
-    })
-
-  if (error || !data) {
-    console.error("Upload error:", error)
+    const ext = file.name.split(".").pop() ?? "bin"
+    const path = `attachments/${crypto.randomUUID()}.${ext}`
+    const { url } = await put(path, file, { access: "public" })
+    return { url, name: file.name, size: file.size, mimeType: file.type }
+  } catch (e) {
+    console.error("Upload error:", e)
     return null
-  }
-
-  const { data: urlData } = client.storage
-    .from(BUCKET)
-    .getPublicUrl(data.path)
-
-  return {
-    url: urlData.publicUrl,
-    name: file.name,
-    size: file.size,
-    mimeType: file.type,
   }
 }
 
 export async function deleteFile(url: string) {
-  const client = supabase
-  if (!client) return
-
-  const path = url.split("/").slice(-4).join("/")
-  await client.storage.from(BUCKET).remove([path])
+  try {
+    await del(url)
+  } catch (e) {
+    console.error("Delete error:", e)
+  }
 }

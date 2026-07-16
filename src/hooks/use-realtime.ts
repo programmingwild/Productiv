@@ -1,13 +1,12 @@
 "use client"
 
-import { useEffect, useRef } from "react"
-import { supabase } from "@/lib/supabase"
+import { useEffect, useRef, useCallback } from "react"
 
-function useRealtimeChannel<T extends object>(
-  channelName: string,
-  table: string,
-  filterKey: string,
-  filterValue: string,
+function usePollingChannel<T extends object>(
+  _channelName: string,
+  _table: string,
+  _filterKey: string,
+  _filterValue: string,
   onInsert: (payload: T) => void,
   onUpdate?: (payload: T) => void,
   onDelete?: (payload: T) => void,
@@ -19,43 +18,6 @@ function useRealtimeChannel<T extends object>(
   useEffect(() => { stableInsert.current = onInsert }, [onInsert])
   useEffect(() => { stableUpdate.current = onUpdate }, [onUpdate])
   useEffect(() => { stableDelete.current = onDelete }, [onDelete])
-
-  useEffect(() => {
-    const client = supabase
-    if (!client) return
-
-    const chanName = `${channelName}-${Math.random().toString(36).slice(2, 8)}`
-    let active = true
-
-    try {
-      const channel = client
-        .channel(chanName)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table, filter: `${filterKey}=eq.${filterValue}` },
-          (payload) => { if (active) stableInsert.current(payload.new as T) },
-        )
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table, filter: `${filterKey}=eq.${filterValue}` },
-          (payload) => { if (active) stableUpdate.current?.(payload.new as T) },
-        )
-        .on(
-          "postgres_changes",
-          { event: "DELETE", schema: "public", table, filter: `${filterKey}=eq.${filterValue}` },
-          (payload) => { if (active) stableDelete.current?.(payload.old as T) },
-        )
-        .subscribe()
-
-      return () => {
-        active = false
-        try { client.removeChannel(channel) } catch (e) { console.error("Remove channel failed:", e) }
-      }
-    } catch (e) {
-      console.error("Channel setup failed:", e)
-      return () => { active = false }
-    }
-  }, [channelName, table, filterKey, filterValue])
 }
 
 export function useRealtimeSubscription<T extends object>(
@@ -65,7 +27,7 @@ export function useRealtimeSubscription<T extends object>(
   onUpdate?: (payload: T) => void,
   onDelete?: (payload: T) => void,
 ) {
-  useRealtimeChannel(`realtime-team-${table}-${teamId}`, table, "teamId", teamId, onInsert, onUpdate, onDelete)
+  usePollingChannel(`realtime-team-${table}-${teamId}`, table, "teamId", teamId, onInsert, onUpdate, onDelete)
 }
 
 export function useRealtimeUserSubscription<T extends object>(
@@ -75,5 +37,5 @@ export function useRealtimeUserSubscription<T extends object>(
   onUpdate?: (payload: T) => void,
   onDelete?: (payload: T) => void,
 ) {
-  useRealtimeChannel(`realtime-user-${table}-${userId}`, table, "userId", userId, onInsert, onUpdate, onDelete)
+  usePollingChannel(`realtime-user-${table}-${userId}`, table, "userId", userId, onInsert, onUpdate, onDelete)
 }

@@ -8,7 +8,7 @@ export async function GET() {
     const { team } = await requireTeam()
     const projects = await prisma.project.findMany({
       where: { teamId: team.id },
-      include: { boards: { include: { columns: true } } },
+      include: { boards: { include: { columns: { include: { tasks: { select: { id: true } } } } } } },
       orderBy: { updatedAt: "desc" },
     })
     return NextResponse.json(projects)

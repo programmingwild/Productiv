@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireTeam } from "@/lib/team"
-import { uploadFile, ensureBucket } from "@/lib/storage"
+import { uploadFile } from "@/lib/storage"
 import { logActivity } from "@/lib/activity"
 import { auth } from "@/lib/auth"
 
@@ -33,8 +33,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ taskId:
 
     const task = await prisma.task.findFirst({ where: { id: taskId, teamId: team.id } })
     if (!task) return NextResponse.json({ error: "Not found" }, { status: 404 })
-
-    await ensureBucket()
 
     const formData = await req.formData()
     const file = formData.get("file") as File

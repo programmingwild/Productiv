@@ -5,8 +5,6 @@ import { DragDropContext, type DropResult } from "@hello-pangea/dnd"
 import { useLanguage } from "@/contexts/language"
 import { KanbanColumn } from "./column"
 import { CreateTaskModal } from "./create-task-modal"
-import { useRealtimeKanban } from "@/hooks/use-realtime-kanban"
-import { supabase } from "@/lib/supabase"
 import type { BoardData, Member } from "@/types/kanban"
 
 interface Props {
@@ -24,8 +22,6 @@ export function KanbanBoard({ board: initialBoard, projectId, members, teamId }:
   const [showCreate, setShowCreate] = useState(false)
   const [createColumnId, setCreateColumnId] = useState<string | null>(null)
 
-  useRealtimeKanban(board, teamId, setBoard)
-
   const fetchBoard = useCallback(async () => {
     try {
       setError("")
@@ -41,40 +37,9 @@ export function KanbanBoard({ board: initialBoard, projectId, members, teamId }:
   useEffect(() => { fetchBoard() }, [fetchBoard])
 
   useEffect(() => {
-    const client = supabase
-    if (!client || !board.id) return
-    const chanName = `columns-${board.id}-${Math.random().toString(36).slice(2, 8)}`
-    let active = true
-    try {
-      const channel = client
-        .channel(chanName)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "columns", filter: `boardId=eq.${board.id}` },
-          (payload) => {
-            if (!active) return
-            fetchBoard()
-          },
-        )
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "columns", filter: `boardId=eq.${board.id}` },
-          () => { if (active) fetchBoard() },
-        )
-        .on(
-          "postgres_changes",
-          { event: "DELETE", schema: "public", table: "columns", filter: `boardId=eq.${board.id}` },
-          () => { if (active) fetchBoard() },
-        )
-        .subscribe()
-      return () => {
-        active = false
-        try { client.removeChannel(channel) } catch {}
-      }
-    } catch {
-      return () => { active = false }
-    }
-  }, [board.id, fetchBoard])
+    const interval = setInterval(fetchBoard, 15000)
+    return () => clearInterval(interval)
+  }, [fetchBoard])
 
   async function onDragEnd(result: DropResult) {
     if (!result.destination) return

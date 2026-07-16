@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { supabase } from "@/lib/supabase"
 import { useLanguage } from "@/contexts/language"
 
 interface TimeEntry {
@@ -64,63 +63,11 @@ export function TimeTracker({ taskId, teamId }: Props) {
     }
   }, [taskId])
 
-  useEffect(() => { fetchEntries() }, [fetchEntries])
-
   useEffect(() => {
-    const client = supabase
-    if (!client) return
-    const chanName = `time-${taskId}-${Math.random().toString(36).slice(2, 8)}`
-    let active = true
-    try {
-      const channel = client
-        .channel(chanName)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "time_entries", filter: `taskId=eq.${taskId}` },
-          (payload) => {
-            if (!active) return
-            const newEntry = payload.new as Record<string, unknown>
-            setEntries((prev) => {
-              if (prev.find((e) => e.id === newEntry.id)) return prev
-              const userRaw = newEntry.user as TimeEntry["user"] | undefined
-              return [{ id: newEntry.id as string, startTime: newEntry.startTime as string, endTime: newEntry.endTime as string | null, duration: newEntry.duration as number | null, notes: newEntry.notes as string | null, user: userRaw ?? { id: "", name: t("Unknown"), image: null } }, ...prev]
-            })
-            if (!newEntry.endTime) {
-              setRunningId(newEntry.id as string)
-              setElapsed(Math.round((Date.now() - new Date(newEntry.startTime as string).getTime()) / 1000))
-            }
-          },
-        )
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "time_entries", filter: `taskId=eq.${taskId}` },
-          (payload) => {
-            if (!active) return
-            const updated = payload.new as Record<string, unknown>
-            setEntries((prev) => prev.map((e) => e.id === updated.id ? { ...e, endTime: updated.endTime as string | null, duration: updated.duration as number | null, notes: updated.notes as string | null } : e))
-            if (updated.endTime) {
-              setRunningId((prev) => prev === updated.id ? null : prev)
-            }
-          },
-        )
-        .on(
-          "postgres_changes",
-          { event: "DELETE", schema: "public", table: "time_entries", filter: `taskId=eq.${taskId}` },
-          (payload) => {
-            if (!active) return
-            const old = payload.old as Record<string, unknown>
-            setEntries((prev) => prev.filter((e) => e.id !== old.id))
-          },
-        )
-        .subscribe()
-      return () => {
-        active = false
-        try { client.removeChannel(channel) } catch {}
-      }
-    } catch {
-      return () => { active = false }
-    }
-  }, [taskId])
+    fetchEntries()
+    const interval = setInterval(fetchEntries, 15000)
+    return () => clearInterval(interval)
+  }, [fetchEntries])
 
   useEffect(() => {
     if (runningId) {

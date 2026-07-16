@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
 import { useLanguage } from "@/contexts/language"
 
 interface Attachment {
@@ -68,48 +67,11 @@ export function FileUpload({ taskId, onAttachmentsChange }: Props) {
     setLoading(false)
   }, [taskId, onAttachmentsChange])
 
-  useState(() => { fetchAttachments() })
-
   useEffect(() => {
-    const client = supabase
-    if (!client) return
-    const chanName = `attachments-${taskId}-${Math.random().toString(36).slice(2, 8)}`
-    let active = true
-    try {
-      const channel = client
-        .channel(chanName)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "attachments", filter: `taskId=eq.${taskId}` },
-          (payload) => {
-            if (!active) return
-            const raw = payload.new as Record<string, unknown>
-            const newAtt: Attachment = { id: raw.id as string, taskId: raw.taskId as string, name: raw.name as string, url: raw.url as string, size: raw.size as number, mimeType: raw.mimeType as string, uploadedBy: raw.uploadedBy as string, createdAt: raw.createdAt as string ?? raw.created_at as string }
-            setAttachments((prev) => {
-              if (prev.find((a) => a.id === newAtt.id)) return prev
-              return [newAtt, ...prev]
-            })
-            onAttachmentsChange?.([newAtt, ...attachmentsRef.current])
-          },
-        )
-        .on(
-          "postgres_changes",
-          { event: "DELETE", schema: "public", table: "attachments", filter: `taskId=eq.${taskId}` },
-          (payload) => {
-            if (!active) return
-            const raw = payload.old as Record<string, unknown>
-            setAttachments((prev) => prev.filter((a) => a.id !== raw.id))
-          },
-        )
-        .subscribe()
-      return () => {
-        active = false
-        try { client.removeChannel(channel) } catch {}
-      }
-    } catch {
-      return () => { active = false }
-    }
-  }, [taskId])
+    fetchAttachments()
+    const interval = setInterval(fetchAttachments, 15000)
+    return () => clearInterval(interval)
+  }, [fetchAttachments])
 
   const doUpload = useCallback(async (file: File) => {
     if (file.size > 10 * 1024 * 1024) {

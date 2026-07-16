@@ -1,18 +1,12 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
-import { supabaseAdmin, supabase } from "@/lib/supabase"
-import { ensureAvatarBucket } from "@/lib/storage"
+import { put } from "@vercel/blob"
 
 export async function POST(req: Request) {
   try {
     const session = await auth()
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-    const client = supabaseAdmin ?? supabase
-    if (!client) return NextResponse.json({ error: "Storage not configured" }, { status: 500 })
-
-    await ensureAvatarBucket()
 
     const formData = await req.formData()
     const file = formData.get("avatar") as File
@@ -29,23 +23,14 @@ export async function POST(req: Request) {
     const ext = file.name.split(".").pop() ?? "jpg"
     const path = `avatars/${session.user.id}/${crypto.randomUUID()}.${ext}`
 
-    const { data, error } = await client.storage
-      .from("avatars")
-      .upload(path, file, { upsert: true })
-
-    if (error || !data) {
-      return NextResponse.json({ error: `Upload failed: ${error?.message ?? "Unknown error"}` }, { status: 500 })
-    }
-
-    const { data: urlData } = client.storage.from("avatars").getPublicUrl(data.path)
-    const imageUrl = urlData.publicUrl
+    const { url } = await put(path, file, { access: "public" })
 
     await prisma.user.update({
       where: { id: session.user.id },
-      data: { image: imageUrl },
+      data: { image: url },
     })
 
-    return NextResponse.json({ image: imageUrl })
+    return NextResponse.json({ image: url })
   } catch (error) {
     console.error(error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
